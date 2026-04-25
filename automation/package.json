@@ -5,9 +5,11 @@
   "private": true,
   "scripts": {
     "record": "node record.js",
-    "process": "node process.js"
+    "process": "node process.js",
+    "upload": "node upload.js"
   },
   "dependencies": {
+    "googleapis": "^144.0.0",
     "puppeteer": "^24.15.0"
   },
   "engines": {
