@@ -19,10 +19,17 @@ if (!fs.existsSync(inputPath)) {
   process.exit(1);
 }
 
-const filter = [
-  'scale=1080:-2:flags=lanczos',
-  'pad=1080:1920:0:(oh-ih)/2:black'
-].join(',');
+// Filter complex: blurred copy of the artwork as ambient background
+//   1. Split source into two streams
+//   2. Background: fill 1080x1920, heavy Gaussian blur, darken + saturate
+//   3. Foreground: scale to 1080 wide preserving aspect (artwork is sharp)
+//   4. Overlay foreground centered on blurred background
+const filterComplex = [
+  '[0:v]split=2[main][bg]',
+  '[bg]scale=-2:1920:flags=lanczos,crop=1080:1920,gblur=sigma=40,eq=brightness=-0.2:saturation=1.35[bgfinal]',
+  '[main]scale=1080:-2:flags=lanczos[fg]',
+  '[bgfinal][fg]overlay=(W-w)/2:(H-h)/2:format=auto[out]'
+].join(';');
 
 function runFFmpeg(args) {
   return new Promise((resolve, reject) => {
@@ -43,7 +50,8 @@ async function main() {
     '-y',
     '-i', inputPath,
     '-t', String(duration),
-    '-vf', filter,
+    '-filter_complex', filterComplex,
+    '-map', '[out]',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-crf', '20',
