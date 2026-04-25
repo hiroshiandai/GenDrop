@@ -1,0 +1,64 @@
+name: GenDrop - Record p5.js Sketch
+
+on:
+  workflow_dispatch:
+    inputs:
+      sketch_id:
+        description: 'Sketch folder name (e.g. 001-ma-26039)'
+        required: true
+        default: '001-ma-26039'
+      duration:
+        description: 'Recording duration in seconds'
+        required: false
+        default: '30'
+      fps:
+        description: 'Frames per second'
+        required: false
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: automation/package-lock.json
+
+      - name: Install system dependencies (FFmpeg, fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install Node dependencies
+        working-directory: automation
+        run: npm ci
+
+      - name: Record sketch (Puppeteer + MediaRecorder)
+        working-directory: automation
+        run: node record.js ../sketches/${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }}
+
+      - name: Process video (FFmpeg → 1080x1920 Shorts MP4)
+        working-directory: automation
+        run: node process.js ${{ inputs.sketch_id }} ${{ inputs.duration }}
+
+      - name: Show output info
+        working-directory: automation
+        run: ls -lh output/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gendrop-${{ inputs.sketch_id }}-run${{ github.run_number }}
+          path: automation/output/*
+          retention-days: 30

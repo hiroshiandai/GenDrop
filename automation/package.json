@@ -1,0 +1,16 @@
+{
+  "name": "gendrop-automation",
+  "version": "0.1.0",
+  "description": "GenDrop automation: record p5.js sketches and process to YouTube Shorts format",
+  "private": true,
+  "scripts": {
+    "record": "node record.js",
+    "process": "node process.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.15.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
