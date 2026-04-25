@@ -15,6 +15,10 @@ on:
         description: 'Frames per second'
         required: false
         default: '30'
+      start_time:
+        description: 'Recording start offset in seconds (0=beginning, 30=middle, 60=end of 90s loop)'
+        required: false
+        default: '0'
 
 permissions:
   contents: read
@@ -46,7 +50,7 @@ jobs:
 
       - name: Record sketch (Puppeteer + MediaRecorder)
         working-directory: automation
-        run: node record.js ../sketches/${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }}
+        run: node record.js ../sketches/${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }}
 
       - name: Process video (FFmpeg → 1080x1920 Shorts MP4)
         working-directory: automation

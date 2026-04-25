@@ -1,6 +1,7 @@
 // GenDrop - Puppeteer recording script
-// Usage: node record.js <sketch_path> [duration_seconds] [fps]
-// Example: node record.js ../sketches/001-ma-26039 30 30
+// Usage: node record.js <sketch_path> [duration] [fps] [start_time]
+// Example: node record.js ../sketches/001-ma-26039 30 30 60
+//          (records seconds 60-90 of the sketch animation)
 
 const puppeteer = require('puppeteer');
 const http = require('http');
@@ -10,6 +11,7 @@ const path = require('path');
 const sketchPath = process.argv[2] || '../sketches/001-ma-26039';
 const duration = parseInt(process.argv[3] || '30', 10);
 const fps = parseInt(process.argv[4] || '30', 10);
+const startTime = parseInt(process.argv[5] || '0', 10);
 
 const SKETCH_DIR = path.resolve(__dirname, sketchPath);
 const SKETCH_ID = path.basename(SKETCH_DIR);
@@ -28,6 +30,7 @@ console.log(`Sketch dir:  ${SKETCH_DIR}`);
 console.log(`URL path:    /${sketchUrlPath}/`);
 console.log(`Duration:    ${duration}s`);
 console.log(`FPS:         ${fps}`);
+console.log(`Start time:  ${startTime}s (offset from sketch start)`);
 console.log('');
 
 const MIME = {
@@ -115,12 +118,19 @@ async function record() {
     console.log('Canvas detected. Warming up 1.5s...');
     await new Promise(r => setTimeout(r, 1500));
 
+    if (startTime > 0) {
+      console.log(`Letting sketch run for ${startTime}s before recording...`);
+    }
     console.log(`Recording ${duration}s @ ${fps}fps via MediaRecorder...`);
 
     const base64 = await page.evaluate(
-      async (durationMs, frameRate) => {
+      async (durationMs, frameRate, startMs) => {
         const canvas = document.querySelector('canvas');
         if (!canvas) throw new Error('canvas not found');
+
+        if (startMs > 0) {
+          await new Promise(r => setTimeout(r, startMs));
+        }
 
         const stream = canvas.captureStream(frameRate);
 
@@ -161,7 +171,8 @@ async function record() {
         });
       },
       duration * 1000,
-      fps
+      fps,
+      startTime * 1000
     );
 
     const data = base64.replace(/^data:[^,]+,/, '');

@@ -19,18 +19,9 @@ if (!fs.existsSync(inputPath)) {
   process.exit(1);
 }
 
-const titleText = sketchId.toUpperCase().replace(/-/g, ' ');
-const fontPath = process.platform === 'win32'
-  ? 'C\\:/Windows/Fonts/arial.ttf'
-  : '/usr/share/fonts/truetype/dejavu/DejaVu-Sans-Bold.ttf';
-
 const filter = [
   'scale=1080:-2:flags=lanczos',
-  'pad=1080:1920:0:(oh-ih)/2:black',
-  `drawtext=fontfile='${fontPath}':text='${titleText}':fontcolor=white:fontsize=56:` +
-    `x=(w-text_w)/2:y=200:shadowcolor=black:shadowx=2:shadowy=2`,
-  `drawtext=fontfile='${fontPath}':text='GenDrop':fontcolor=white@0.55:fontsize=32:` +
-    `x=(w-text_w)/2:y=h-200:shadowcolor=black:shadowx=2:shadowy=2`
+  'pad=1080:1920:0:(oh-ih)/2:black'
 ].join(',');
 
 function runFFmpeg(args) {
