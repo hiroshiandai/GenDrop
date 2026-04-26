@@ -5,8 +5,11 @@
 //   GEMINI_API_KEY
 //
 // Optional env vars:
-//   GEMINI_MODEL      Default: gemini-3-flash-preview
-//                     Other options: gemini-3.1-flash-lite-preview
+//   GEMINI_MODEL      Default: gemini-2.5-flash  (free tier compatible)
+//                     Other options:
+//                       gemini-2.5-flash-lite       (free tier, lighter)
+//                       gemini-3-flash-preview      (paid - requires prepayment credits)
+//                       gemini-3.1-flash-lite-preview (paid)
 //
 // Inputs:
 //   ../sketches/<sketch_id>/meta.json   (title, concept, techniques, mood)
@@ -21,7 +24,7 @@ const path = require('path');
 const sketchId = process.argv[2] || '001-ma-26039';
 
 const apiKey = process.env.GEMINI_API_KEY;
-const modelName = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 if (!apiKey) {
   console.error('GEMINI_API_KEY env var is missing.');
