@@ -2,3 +2,8 @@ node_modules/
 output/
 *.log
 .DS_Store
+
+# OAuth credentials - NEVER commit these!
+client_secret.json
+token.json
+.env
