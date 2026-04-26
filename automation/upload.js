@@ -7,6 +7,7 @@
 //   GOOGLE_OAUTH_REFRESH_TOKEN
 //   DRIVE_SHORTS_FOLDER_ID
 //   DRIVE_THUMBS_FOLDER_ID
+//   DRIVE_METADATA_FOLDER_ID  (optional - skipped if not set)
 //
 // Why OAuth instead of Service Account?
 //   Service Accounts have 0 storage quota on personal Google Drive,
@@ -23,12 +24,15 @@ const startTime = process.argv[3] || '0';
 const OUTPUT_DIR = path.resolve(__dirname, 'output');
 const mp4Path = path.join(OUTPUT_DIR, `${sketchId}-shorts.mp4`);
 const jpgPath = path.join(OUTPUT_DIR, `${sketchId}-thumb.jpg`);
+const metaJsonPath = path.join(OUTPUT_DIR, `${sketchId}-meta.json`);
+const postTxtPath = path.join(OUTPUT_DIR, `${sketchId}-post.txt`);
 
 const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
 const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
 const shortsFolderId = process.env.DRIVE_SHORTS_FOLDER_ID;
 const thumbsFolderId = process.env.DRIVE_THUMBS_FOLDER_ID;
+const metadataFolderId = process.env.DRIVE_METADATA_FOLDER_ID;
 
 const missing = [];
 if (!clientId) missing.push('GOOGLE_OAUTH_CLIENT_ID');
@@ -102,6 +106,29 @@ async function main() {
   console.log(`  ok id=${jpg.id} (${(jpg.localSize / 1024).toFixed(1)} KB)`);
   console.log(`  ${jpg.webViewLink}`);
 
+  let metaUp = null;
+  let postUp = null;
+  if (metadataFolderId) {
+    if (fs.existsSync(metaJsonPath)) {
+      console.log(`Uploading ${baseName}.json to metadata/ ...`);
+      metaUp = await uploadFile(metaJsonPath, metadataFolderId, `${baseName}.json`, 'application/json');
+      console.log(`  ok id=${metaUp.id}`);
+      console.log(`  ${metaUp.webViewLink}`);
+    } else {
+      console.log(`(skip) ${metaJsonPath} not found - metadata generation may have been skipped.`);
+    }
+    if (fs.existsSync(postTxtPath)) {
+      console.log(`Uploading ${baseName}.txt to metadata/ ...`);
+      postUp = await uploadFile(postTxtPath, metadataFolderId, `${baseName}.txt`, 'text/plain');
+      console.log(`  ok id=${postUp.id}`);
+      console.log(`  ${postUp.webViewLink}`);
+    } else {
+      console.log(`(skip) ${postTxtPath} not found.`);
+    }
+  } else {
+    console.log('(DRIVE_METADATA_FOLDER_ID not set - metadata upload skipped.)');
+  }
+
   console.log('');
   console.log('Upload complete.');
 
@@ -111,7 +138,9 @@ async function main() {
     uploadedAt: new Date().toISOString(),
     baseName,
     mp4: { id: mp4.id, name: mp4.name, link: mp4.webViewLink },
-    thumb: { id: jpg.id, name: jpg.name, link: jpg.webViewLink }
+    thumb: { id: jpg.id, name: jpg.name, link: jpg.webViewLink },
+    meta: metaUp ? { id: metaUp.id, name: metaUp.name, link: metaUp.webViewLink } : null,
+    post: postUp ? { id: postUp.id, name: postUp.name, link: postUp.webViewLink } : null
   };
   fs.writeFileSync(
     path.join(OUTPUT_DIR, `${sketchId}-upload.json`),
