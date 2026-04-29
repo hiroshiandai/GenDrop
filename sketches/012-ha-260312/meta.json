@@ -1,0 +1,17 @@
+{
+  "title": "HA-260312",
+  "series": "HA",
+  "project": "Genmapping",
+  "concept": "波として立ち現れ、波として消えていく — 形のない揺らぎを幾何学に翻訳するジェネラティブアート。流体や粒子の境界を曖昧にしながら、絶え間ない動きそのものが構造となるプロセスを描く。「波（HA）」という最も根源的なリズムを、アルゴリズムによって可視化する試み。",
+  "techniques": [
+    "p5.js",
+    "generative animation",
+    "wave function",
+    "fluid dynamics",
+    "particle interaction",
+    "noise-driven flow",
+    "layered transparency",
+    "soft motion blur"
+  ],
+  "mood": "流動・有機・呼吸的"
+}

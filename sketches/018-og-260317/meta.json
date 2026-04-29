@@ -1,0 +1,17 @@
+{
+  "title": "OG-260317",
+  "series": "OG",
+  "project": "Genmapping",
+  "concept": "始原のかたち。複雑さが生まれる以前にすでにあった構造を、アルゴリズムによって辿り直すジェネラティブアート。原子・細胞・記憶の最小単位が呼応するように立ち現れる。「起源（OG = Origin）」というテーマを、削ぎ落とされた幾何学で表現する試み。",
+  "techniques": [
+    "p5.js",
+    "generative animation",
+    "primordial geometry",
+    "cellular pattern",
+    "minimal seed",
+    "iterative growth",
+    "low-noise rendering",
+    "gradient shadow"
+  ],
+  "mood": "原初的・静謐・低ノイズ"
+}

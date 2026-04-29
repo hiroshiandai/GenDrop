@@ -1,0 +1,17 @@
+{
+  "title": "TO-260316",
+  "series": "TO",
+  "project": "Genmapping",
+  "concept": "垂直に立ち上がる構造の純粋幾何学。地から天へ、点から無限へ — 一方向の運動が積層して塔となるプロセスをアルゴリズムで描くジェネラティブアート。「塔（TO）」が象徴する到達への意志、その上昇の連続性を、生成的な構造として再構築する試み。",
+  "techniques": [
+    "p5.js",
+    "generative animation",
+    "vertical composition",
+    "stacking geometry",
+    "perspective layering",
+    "ascending motion",
+    "structural repetition",
+    "minimal palette"
+  ],
+  "mood": "静謐・上昇感・幾何学的"
+}

@@ -1,0 +1,18 @@
+{
+  "title": "MA-260310",
+  "series": "MA",
+  "project": "Genmapping",
+  "concept": "闇の中に生まれる小さな光の鼓動から、幾何学が出現し、曼荼羅へと形成され、再び中心へ還っていく循環を描いた作品。日本的な「間（MA）」の感覚を起点に、空間・呼吸・秩序の生成と回帰を可視化している。神聖幾何学を再現するのではなく、アルゴリズムによって\"生きた構造\"として再構築する試み。",
+  "techniques": [
+    "p5.js",
+    "generative animation",
+    "particle system",
+    "noise field",
+    "radial geometry",
+    "procedural mandala",
+    "pulse-based animation",
+    "layered transparency",
+    "slow rotation system"
+  ],
+  "mood": "静謐"
+}

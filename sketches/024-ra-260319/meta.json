@@ -1,0 +1,17 @@
+{
+  "title": "RA-260319",
+  "series": "RA",
+  "project": "Genmapping",
+  "concept": "螺旋として進む時間。直線でも円でもない、戻りながら前に進む構造を描くジェネラティブアート。「螺（RA）」が示す立体的な反復は、変化と継続の両義性を帯びる。同じパターンが少しずつズレながら積層していくことで、新しい風景が立ち現れる。",
+  "techniques": [
+    "p5.js",
+    "generative animation",
+    "spiral structure",
+    "phase-shifted repetition",
+    "layered rotation",
+    "progressive variance",
+    "depth illusion",
+    "rhythmic movement"
+  ],
+  "mood": "動的・幾何学的・進行的"
+}

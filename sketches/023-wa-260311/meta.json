@@ -1,0 +1,17 @@
+{
+  "title": "WA-260311",
+  "series": "WA",
+  "project": "Genmapping",
+  "concept": "閉じることで生まれる完結性。輪・和・環 — 「WA」が示す円の概念を、生成的な構造として再構築するジェネラティブアート。すべてが調和し、戻ってくる場所としての円。日本的な美意識である「和」を、アルゴリズムの反復と対称性で可視化する試み。",
+  "techniques": [
+    "p5.js",
+    "generative animation",
+    "circular geometry",
+    "symmetric pattern",
+    "harmonic motion",
+    "looping cycle",
+    "radial composition",
+    "warm tone"
+  ],
+  "mood": "調和・温和・循環的"
+}

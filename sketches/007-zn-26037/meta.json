@@ -1,0 +1,18 @@
+{
+  "title": "ZN-26037",
+  "series": "ZN",
+  "project": "Genmapping",
+  "concept": "今この瞬間にしか存在しない一回性のかたちを、アルゴリズムによって描き出すジェネラティブアート。禅の精神 ─ 一期一会・無常・簡素 ─ を起点に、複雑さを削ぎ落とした構造の生成と消滅を可視化する。同じ瞬間は二度と来ない。一筆ごとが完結であり、次の一筆との連続性に意味は要らない。そのような「禅」の時間感覚を、生成的アルゴリズムで再構築する試み。",
+  "techniques": [
+    "p5.js",
+    "generative animation",
+    "minimal composition",
+    "single-stroke aesthetic",
+    "enso (circular form)",
+    "temporal singularity",
+    "void / negative space",
+    "subtle gradient",
+    "non-repeating motion"
+  ],
+  "mood": "静寂・瞑想・余白"
+}
