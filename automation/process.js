@@ -1,9 +1,9 @@
 // GenDrop - FFmpeg post-processing (dual output)
-// Usage: node process.js <sketch_id> [shorts_duration_seconds] [full_loop_seconds] [fps]
+// Usage: node process.js <sketch_id> [shorts_duration_seconds] [fps]
 //
 // Inputs:
 //   SKETCH_ID-raw.webm      → SKETCH_ID-shorts.mp4  (Shorts look: blurred 9:16 frame)
-//   SKETCH_ID-full-raw.webm → SKETCH_ID-full.mp4    (native 9:16, letterboxed, higher quality)
+//   SKETCH_ID-full-raw.webm → SKETCH_ID-full.mp4    (entire full-raw duration, letterboxed 9:16)
 
 const fs = require('fs');
 const path = require('path');
@@ -11,8 +11,7 @@ const { spawn } = require('child_process');
 
 const sketchId = process.argv[2] || '001-ma-26039';
 const shortsDuration = parseInt(process.argv[3] || '30', 10);
-let fullDuration = parseInt(process.argv[4], 10);
-const fps = parseInt(process.argv[5] || '30', 10);
+const fps = parseInt(process.argv[4] || '30', 10);
 
 const OUTPUT_DIR = path.resolve(__dirname, 'output');
 const shortsInput = path.join(OUTPUT_DIR, `${sketchId}-raw.webm`);
@@ -20,25 +19,6 @@ const fullInput = path.join(OUTPUT_DIR, `${sketchId}-full-raw.webm`);
 const shortsOutput = path.join(OUTPUT_DIR, `${sketchId}-shorts.mp4`);
 const fullOutput = path.join(OUTPUT_DIR, `${sketchId}-full.mp4`);
 const thumbPath = path.join(OUTPUT_DIR, `${sketchId}-thumb.jpg`);
-
-function readFullLoopFromMeta(id) {
-  const metaPath = path.join(__dirname, '..', 'sketches', id, 'meta.json');
-  const fallback = parseInt(process.env.GENDROP_FULL_LOOP_DEFAULT || '90', 10);
-  if (!fs.existsSync(metaPath)) return fallback;
-  try {
-    const j = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    if (typeof j.loop_seconds === 'number' && j.loop_seconds > 0) {
-      return Math.min(j.loop_seconds, 600);
-    }
-  } catch {
-    /* ignore */
-  }
-  return fallback;
-}
-
-if (!Number.isFinite(fullDuration) || fullDuration <= 0) {
-  fullDuration = readFullLoopFromMeta(sketchId);
-}
 
 if (!fs.existsSync(shortsInput)) {
   console.error(`Input not found: ${shortsInput}`);
@@ -75,8 +55,8 @@ async function main() {
   console.log('=== GenDrop Processor ===');
   console.log(`Sketch:        ${sketchId}`);
   console.log(`Shorts input:  ${shortsInput}`);
-  console.log(`Full input:    ${fullInput}`);
-  console.log(`Shorts dur:    ${shortsDuration}s | Full dur: ${fullDuration}s | fps: ${fps}`);
+  console.log(`Full input:    ${fullInput} (encode full duration — matches one loop raw)`);
+  console.log(`Shorts dur:    ${shortsDuration}s | fps: ${fps}`);
   console.log('');
 
   await runFFmpeg([
@@ -97,7 +77,6 @@ async function main() {
   await runFFmpeg([
     '-y',
     '-i', fullInput,
-    '-t', String(fullDuration),
     '-filter_complex', fullFilterComplex,
     '-map', '[out]',
     '-c:v', 'libx264',

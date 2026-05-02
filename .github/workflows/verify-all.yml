@@ -26,10 +26,6 @@ on:
         description: 'Max sketches to run in parallel (lower = safer for API limits)'
         required: false
         default: '4'
-      full_loop_seconds:
-        description: 'Full 9:16 capture length in seconds (uniform for all sketches)'
-        required: false
-        default: '90'
 
 permissions:
   contents: read
@@ -87,11 +83,11 @@ jobs:
 
       - name: Record sketch (Puppeteer + MediaRecorder)
         working-directory: automation
-        run: node record.js ../sketches/${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }} ${{ inputs.full_loop_seconds }}
+        run: node record.js ../sketches/${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }}
 
       - name: Process video (Shorts + full 9:16 MP4)
         working-directory: automation
-        run: node process.js ${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.full_loop_seconds }} ${{ inputs.fps }}
+        run: node process.js ${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }}
 
       - name: Show output info
         working-directory: automation

@@ -1,11 +1,15 @@
 // GenDrop - Puppeteer recording script (dual output)
-// Usage: node record.js <sketch_path> [shorts_duration] [fps] [shorts_start_time] [full_loop_seconds]
+// Usage: node record.js <sketch_path> [shorts_duration] [fps] [shorts_start_time] [loop_override_seconds]
 //
 // Produces:
-//   SKETCH_ID-raw.webm          — clip for YouTube Shorts pipeline (960×540 viewport segment)
-//   SKETCH_ID-full-raw.webm     — full-length 9:16 viewport capture from t=0 (1080×1920)
+//   SKETCH_ID-raw.webm       — Shorts source clip (960×540 viewport, segment only)
+//   SKETCH_ID-full-raw.webm  — one full animation cycle from frame 0 (1080×1920 viewport)
 //
-// full_loop_seconds: optional CLI override; else meta.json "loop_seconds"; else GENDROP_FULL_LOOP_DEFAULT or 90.
+// Full-length duration = length of ONE animation loop (not an arbitrary “recording time” setting):
+//   1) sketch: window.__GENDROP_LOOP_SEC (seconds) or __GENDROP_LOOP_FRAMES (frames at capture fps)
+//   2) meta.json: animation_loop_seconds (preferred) or legacy loop_seconds
+//   3) CLI argv[6] — emergency override only
+//   4) env GENDROP_ANIMATION_LOOP_DEFAULT or legacy GENDROP_FULL_LOOP_DEFAULT (default 90)
 
 const puppeteer = require('puppeteer');
 const http = require('http');
@@ -16,7 +20,7 @@ const sketchPath = process.argv[2] || '../sketches/001-ma-26039';
 const shortsDuration = parseInt(process.argv[3] || '30', 10);
 const fps = parseInt(process.argv[4] || '30', 10);
 const shortsStartTime = parseInt(process.argv[5] || '0', 10);
-const fullLoopCli = parseInt(process.argv[6] || '', 10);
+const loopOverrideCli = parseInt(process.argv[6] || '', 10);
 
 const P5_VENDOR = path.join(__dirname, 'vendor', 'p5.min.js');
 const GHA_CDN_P5_RE =
@@ -36,8 +40,89 @@ const sketchUrlPath = path
 const SHORTS_VIEWPORT = { width: 960, height: 540, deviceScaleFactor: 1 };
 const FULL_VIEWPORT = { width: 1080, height: 1920, deviceScaleFactor: 1 };
 
-const DEFAULT_FULL_LOOP = parseInt(process.env.GENDROP_FULL_LOOP_DEFAULT || '90', 10);
-const MAX_FULL_LOOP = 600;
+const MAX_ANIMATION_LOOP_SEC = 600;
+
+function envDefaultLoopSeconds() {
+  const v = parseInt(
+    process.env.GENDROP_ANIMATION_LOOP_DEFAULT ||
+      process.env.GENDROP_FULL_LOOP_DEFAULT ||
+      '90',
+    10
+  );
+  return Number.isFinite(v) && v > 0 ? v : 90;
+}
+
+function clampLoopSeconds(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return envDefaultLoopSeconds();
+  return Math.min(Math.max(sec, 0.5), MAX_ANIMATION_LOOP_SEC);
+}
+
+function readMetaAnimationLoopSeconds(sketchDir) {
+  const metaPath = path.join(sketchDir, 'meta.json');
+  if (!fs.existsSync(metaPath)) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    if (typeof j.animation_loop_seconds === 'number' && j.animation_loop_seconds > 0) {
+      return j.animation_loop_seconds;
+    }
+    if (typeof j.loop_seconds === 'number' && j.loop_seconds > 0) {
+      return j.loop_seconds;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function probeSketchLoopHint(page) {
+  return page.evaluate(() => {
+    const sec = window.__GENDROP_LOOP_SEC;
+    const frames = window.__GENDROP_LOOP_FRAMES;
+    if (typeof sec === 'number' && sec > 0 && Number.isFinite(sec)) {
+      return { kind: 'sec', value: sec };
+    }
+    if (typeof frames === 'number' && frames > 0 && Number.isFinite(frames)) {
+      return { kind: 'frames', value: frames };
+    }
+    return null;
+  });
+}
+
+async function resolveAnimationLoopSeconds(page, sketchDir, frameRate) {
+  const hint = await probeSketchLoopHint(page);
+  if (hint?.kind === 'sec') {
+    return {
+      seconds: clampLoopSeconds(hint.value),
+      source: 'sketch window.__GENDROP_LOOP_SEC (one loop)'
+    };
+  }
+  if (hint?.kind === 'frames') {
+    return {
+      seconds: clampLoopSeconds(hint.value / frameRate),
+      source: 'sketch window.__GENDROP_LOOP_FRAMES / fps (one loop)'
+    };
+  }
+
+  const metaSec = readMetaAnimationLoopSeconds(sketchDir);
+  if (metaSec != null) {
+    return {
+      seconds: clampLoopSeconds(metaSec),
+      source: 'meta.json animation_loop_seconds (or legacy loop_seconds)'
+    };
+  }
+
+  if (Number.isFinite(loopOverrideCli) && loopOverrideCli > 0) {
+    return {
+      seconds: clampLoopSeconds(loopOverrideCli),
+      source: 'CLI argv[6] override (emergency)'
+    };
+  }
+
+  return {
+    seconds: clampLoopSeconds(envDefaultLoopSeconds()),
+    source: 'env GENDROP_ANIMATION_LOOP_DEFAULT (fallback)'
+  };
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -54,25 +139,6 @@ const MIME = {
   '.ttf': 'font/ttf',
   '.otf': 'font/otf'
 };
-
-function readLoopSeconds(sketchDir) {
-  if (Number.isFinite(fullLoopCli) && fullLoopCli > 0) {
-    return Math.min(fullLoopCli, MAX_FULL_LOOP);
-  }
-  const metaPath = path.join(sketchDir, 'meta.json');
-  if (!fs.existsSync(metaPath)) {
-    return Math.min(DEFAULT_FULL_LOOP, MAX_FULL_LOOP);
-  }
-  try {
-    const j = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    if (typeof j.loop_seconds === 'number' && j.loop_seconds > 0) {
-      return Math.min(j.loop_seconds, MAX_FULL_LOOP);
-    }
-  } catch {
-    /* fall through */
-  }
-  return Math.min(DEFAULT_FULL_LOOP, MAX_FULL_LOOP);
-}
 
 function startServer() {
   return new Promise((resolve, reject) => {
@@ -240,15 +306,86 @@ async function captureWebm(page, pageUrl, viewport, label, durationMs, frameRate
   return Buffer.from(data, 'base64');
 }
 
-async function record() {
-  const fullLoopSeconds = readLoopSeconds(SKETCH_DIR);
+/**
+ * Full capture: load → measure one-loop length → reload so t≈0 → record exactly one loop.
+ */
+async function captureFullLoopWebm(page, pageUrl, viewport, frameRate, videoBitsPerSecond, sketchDir) {
+  await page.setViewport(viewport);
+  console.log(`\n--- Full animation (one loop, 9:16 viewport) ---`);
+  console.log(`Loading ${pageUrl} (probe pass)`);
+  await page.goto(pageUrl, { waitUntil: 'load', timeout: 180000 });
+  await page.waitForSelector('canvas', { timeout: 180000 });
+  console.log('Warmup 2s (for sketch to set loop hints)...');
+  await new Promise(r => setTimeout(r, 2000));
 
+  const { seconds, source } = await resolveAnimationLoopSeconds(page, sketchDir, frameRate);
+  const durationMs = Math.round(seconds * 1000);
+  console.log(`One loop length: ${seconds}s — ${source}`);
+  console.log(`Reloading page for capture from animation start → ${seconds}s`);
+
+  await page.goto(pageUrl, { waitUntil: 'load', timeout: 180000 });
+  await page.waitForSelector('canvas', { timeout: 180000 });
+  await new Promise(r => setTimeout(r, 1000));
+
+  const base64 = await page.evaluate(
+    async (durationMsInner, frameRateInner, videoBitsPerSecondInner) => {
+      const log = m => console.log(`[rec] ${m}`);
+      const canvas = document.querySelector('canvas');
+      if (!canvas) throw new Error('canvas not found');
+      log(`canvas ${canvas.width}x${canvas.height} (full loop from start)`);
+
+      const stream = canvas.captureStream(frameRateInner);
+      const candidates = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+      const mimeType = candidates.find(m => MediaRecorder.isTypeSupported(m));
+      if (!mimeType) throw new Error('No supported MediaRecorder mimeType');
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: videoBitsPerSecondInner
+      });
+
+      const chunks = [];
+      recorder.ondataavailable = e => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+      const stopped = new Promise((resolve, reject) => {
+        recorder.onstop = resolve;
+        recorder.onerror = e => reject(e.error || new Error('recorder error'));
+      });
+
+      recorder.start(1000);
+      await new Promise(r => setTimeout(r, durationMsInner));
+      recorder.stop();
+      await stopped;
+
+      const blob = new Blob(chunks, { type: mimeType });
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    },
+    durationMs,
+    frameRate,
+    videoBitsPerSecond
+  );
+
+  const data = base64.replace(/^data:[^,]+,/, '');
+  return Buffer.from(data, 'base64');
+}
+
+async function record() {
   console.log('=== GenDrop Recorder ===');
   console.log(`Sketch ID:        ${SKETCH_ID}`);
   console.log(`Sketch dir:       ${SKETCH_DIR}`);
   console.log(`URL path:         /${sketchUrlPath}/`);
   console.log(`Shorts clip:      ${shortsDuration}s after ${shortsStartTime}s offset (960×540 viewport)`);
-  console.log(`Full 9:16 capture: ${fullLoopSeconds}s from start (1080×1920 viewport)`);
+  console.log(`Full capture:     exactly one animation loop from start (1080×1920 viewport)`);
   console.log(`FPS:              ${fps}`);
   console.log('');
 
@@ -292,15 +429,13 @@ async function record() {
 
     const pageFull = await newRecordingPage(browser);
     try {
-      const fullBuf = await captureWebm(
+      const fullBuf = await captureFullLoopWebm(
         pageFull,
         pageUrl,
         FULL_VIEWPORT,
-        'Full-loop 9:16 archival source',
-        fullLoopSeconds * 1000,
         fps,
-        0,
-        12_000_000
+        12_000_000,
+        SKETCH_DIR
       );
       const fullPath = path.join(OUTPUT_DIR, `${SKETCH_ID}-full-raw.webm`);
       fs.writeFileSync(fullPath, fullBuf);

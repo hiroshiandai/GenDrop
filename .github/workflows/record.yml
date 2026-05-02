@@ -19,10 +19,6 @@ on:
         description: 'Recording start offset in seconds (default 30 = skip the boring intro on most sketches)'
         required: false
         default: '30'
-      full_loop_seconds:
-        description: 'Full 9:16 capture length in seconds (from sketch start; overrides meta.json loop_seconds if set)'
-        required: false
-        default: '90'
 
 permissions:
   contents: read
@@ -54,11 +50,11 @@ jobs:
 
       - name: Record sketch (Puppeteer + MediaRecorder)
         working-directory: automation
-        run: node record.js ../sketches/${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }} ${{ inputs.full_loop_seconds }}
+        run: node record.js ../sketches/${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }}
 
       - name: Process video (Shorts + full 9:16 MP4)
         working-directory: automation
-        run: node process.js ${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.full_loop_seconds }} ${{ inputs.fps }}
+        run: node process.js ${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }}
 
       - name: Show output info
         working-directory: automation
