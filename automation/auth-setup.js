@@ -1,4 +1,8 @@
 // GenDrop - One-time OAuth setup
+//
+// Google Cloud Console → OAuth 2.0 クライアント →「承認済みのリダイレクト URI」に必ず登録:
+//   http://localhost:3000/oauth2callback
+// （GitHub ユーザー名・Pages URL はこのスクリプトでは使いません）
 // Usage: node auth-setup.js
 //
 // This script does:
