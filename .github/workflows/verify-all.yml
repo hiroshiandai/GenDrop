@@ -21,7 +21,7 @@ on:
       start_time:
         description: 'Recording start offset in seconds (uniform for all sketches)'
         required: false
-        default: '0'
+        default: '30'
       max_parallel:
         description: 'Max sketches to run in parallel (lower = safer for API limits)'
         required: false
