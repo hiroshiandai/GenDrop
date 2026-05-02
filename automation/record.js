@@ -13,6 +13,10 @@ const duration = parseInt(process.argv[3] || '30', 10);
 const fps = parseInt(process.argv[4] || '30', 10);
 const startTime = parseInt(process.argv[5] || '0', 10);
 
+const P5_VENDOR = path.join(__dirname, 'vendor', 'p5.min.js');
+const GHA_CDN_P5_RE =
+  /cdnjs\.cloudflare\.com\/ajax\/libs\/p5\.js\/[0-9.]+\/p5(\.min)?\.js/;
+
 const SKETCH_DIR = path.resolve(__dirname, sketchPath);
 const SKETCH_ID = path.basename(SKETCH_DIR);
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -99,23 +103,50 @@ async function record() {
   let webmBuffer;
 
   try {
+    if (!fs.existsSync(P5_VENDOR)) {
+      throw new Error(`Missing vendor p5: ${P5_VENDOR} (required for offline/CDN-safe recording)`);
+    }
+
     const page = await browser.newPage();
     await page.setViewport({ width: 960, height: 540, deviceScaleFactor: 1 });
+    page.setDefaultTimeout(180000);
+    page.setDefaultNavigationTimeout(180000);
+
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      try {
+        const u = req.url();
+        if (GHA_CDN_P5_RE.test(u) || (u.includes('cdnjs.cloudflare.com/ajax/libs/p5.js/') && u.includes('p5') && u.includes('.js'))) {
+          const body = fs.readFileSync(P5_VENDOR);
+          void req.respond({
+            status: 200,
+            contentType: 'application/javascript; charset=utf-8',
+            body
+          });
+          return;
+        }
+      } catch (e) {
+        console.error('Request interception failed:', e.message);
+      }
+      void req.continue();
+    });
 
     page.on('console', msg => {
       const t = msg.type();
       if (t === 'error' || t === 'warn') {
         console.log(`[browser ${t}] ${msg.text()}`);
+      } else if (t === 'log' || t === 'info') {
+        console.log(`[browser] ${msg.text()}`);
       }
     });
     page.on('pageerror', err => console.log(`[pageerror] ${err.message}`));
 
     const url = `http://127.0.0.1:${PORT}/${sketchUrlPath}/`;
     console.log(`Loading ${url}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    console.log('DOM loaded. Waiting for canvas...');
+    await page.goto(url, { waitUntil: 'load', timeout: 180000 });
+    console.log('Page load complete. Waiting for canvas...');
 
-    await page.waitForSelector('canvas', { timeout: 30000 });
+    await page.waitForSelector('canvas', { timeout: 180000 });
     const canvasInfo = await page.evaluate(() => {
       const c = document.querySelector('canvas');
       return { width: c.width, height: c.height };
@@ -127,11 +158,6 @@ async function record() {
       console.log(`Letting sketch run for ${startTime}s before recording...`);
     }
     console.log(`Recording ${duration}s @ ${fps}fps via MediaRecorder...`);
-
-    page.on('console', msg => {
-      const t = msg.type();
-      if (t === 'log' || t === 'info') console.log(`[browser] ${msg.text()}`);
-    });
 
     const base64 = await page.evaluate(
       async (durationMs, frameRate, startMs) => {
