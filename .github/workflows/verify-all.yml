@@ -26,6 +26,10 @@ on:
         description: 'Max sketches to run in parallel (lower = safer for API limits)'
         required: false
         default: '4'
+      full_loop_seconds:
+        description: 'Full 9:16 capture length in seconds (uniform for all sketches)'
+        required: false
+        default: '90'
 
 permissions:
   contents: read
@@ -53,7 +57,7 @@ jobs:
   verify:
     needs: list-sketches
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -83,11 +87,11 @@ jobs:
 
       - name: Record sketch (Puppeteer + MediaRecorder)
         working-directory: automation
-        run: node record.js ../sketches/${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }}
+        run: node record.js ../sketches/${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }} ${{ inputs.full_loop_seconds }}
 
-      - name: Process video (FFmpeg → 1080x1920 Shorts MP4)
+      - name: Process video (Shorts + full 9:16 MP4)
         working-directory: automation
-        run: node process.js ${{ matrix.sketch_id }} ${{ inputs.duration }}
+        run: node process.js ${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.full_loop_seconds }} ${{ inputs.fps }}
 
       - name: Show output info
         working-directory: automation
@@ -107,6 +111,7 @@ jobs:
           GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
           DRIVE_SHORTS_FOLDER_ID: ${{ secrets.DRIVE_SHORTS_FOLDER_ID }}
           DRIVE_THUMBS_FOLDER_ID: ${{ secrets.DRIVE_THUMBS_FOLDER_ID }}
+          DRIVE_FULL_FOLDER_ID: ${{ secrets.DRIVE_FULL_FOLDER_ID }}
           DRIVE_METADATA_FOLDER_ID: ${{ secrets.DRIVE_METADATA_FOLDER_ID }}
         run: node upload.js ${{ matrix.sketch_id }} ${{ inputs.start_time }}
 

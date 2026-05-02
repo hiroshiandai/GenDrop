@@ -7,6 +7,7 @@
 //   GOOGLE_OAUTH_REFRESH_TOKEN
 //   DRIVE_SHORTS_FOLDER_ID
 //   DRIVE_THUMBS_FOLDER_ID
+//   DRIVE_FULL_FOLDER_ID      (optional — 9:16 full-length archival MP4)
 //   DRIVE_METADATA_FOLDER_ID  (optional - skipped if not set)
 //
 // Why OAuth instead of Service Account?
@@ -23,6 +24,7 @@ const startTime = process.argv[3] || '0';
 
 const OUTPUT_DIR = path.resolve(__dirname, 'output');
 const mp4Path = path.join(OUTPUT_DIR, `${sketchId}-shorts.mp4`);
+const fullMp4Path = path.join(OUTPUT_DIR, `${sketchId}-full.mp4`);
 const jpgPath = path.join(OUTPUT_DIR, `${sketchId}-thumb.jpg`);
 const metaJsonPath = path.join(OUTPUT_DIR, `${sketchId}-meta.json`);
 const postTxtPath = path.join(OUTPUT_DIR, `${sketchId}-post.txt`);
@@ -32,6 +34,7 @@ const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
 const shortsFolderId = process.env.DRIVE_SHORTS_FOLDER_ID;
 const thumbsFolderId = process.env.DRIVE_THUMBS_FOLDER_ID;
+const fullFolderId = process.env.DRIVE_FULL_FOLDER_ID;
 const metadataFolderId = process.env.DRIVE_METADATA_FOLDER_ID;
 
 const missing = [];
@@ -101,6 +104,20 @@ async function main() {
   console.log(`  ok id=${mp4.id} (${(mp4.localSize / 1024 / 1024).toFixed(2)} MB)`);
   console.log(`  ${mp4.webViewLink}`);
 
+  let fullMp4 = null;
+  if (fullFolderId) {
+    if (fs.existsSync(fullMp4Path)) {
+      console.log(`Uploading ${baseName}-full.mp4 to full/ ...`);
+      fullMp4 = await uploadFile(fullMp4Path, fullFolderId, `${baseName}-full.mp4`, 'video/mp4');
+      console.log(`  ok id=${fullMp4.id} (${(fullMp4.localSize / 1024 / 1024).toFixed(2)} MB)`);
+      console.log(`  ${fullMp4.webViewLink}`);
+    } else {
+      console.log(`(skip) ${fullMp4Path} not found.`);
+    }
+  } else {
+    console.log('(DRIVE_FULL_FOLDER_ID not set - full-length MP4 upload skipped.)');
+  }
+
   console.log(`Uploading ${baseName}.jpg to thumbs/ ...`);
   const jpg = await uploadFile(jpgPath, thumbsFolderId, `${baseName}.jpg`, 'image/jpeg');
   console.log(`  ok id=${jpg.id} (${(jpg.localSize / 1024).toFixed(1)} KB)`);
@@ -138,6 +155,9 @@ async function main() {
     uploadedAt: new Date().toISOString(),
     baseName,
     mp4: { id: mp4.id, name: mp4.name, link: mp4.webViewLink },
+    fullMp4: fullMp4
+      ? { id: fullMp4.id, name: fullMp4.name, link: fullMp4.webViewLink }
+      : null,
     thumb: { id: jpg.id, name: jpg.name, link: jpg.webViewLink },
     meta: metaUp ? { id: metaUp.id, name: metaUp.name, link: metaUp.webViewLink } : null,
     post: postUp ? { id: postUp.id, name: postUp.name, link: postUp.webViewLink } : null

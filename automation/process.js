@@ -1,35 +1,66 @@
-// GenDrop - FFmpeg post-processing
-// Usage: node process.js <sketch_id> [duration_seconds]
-// Converts 960x540 webm into 1080x1920 (9:16) MP4 with title overlay
+// GenDrop - FFmpeg post-processing (dual output)
+// Usage: node process.js <sketch_id> [shorts_duration_seconds] [full_loop_seconds] [fps]
+//
+// Inputs:
+//   SKETCH_ID-raw.webm      → SKETCH_ID-shorts.mp4  (Shorts look: blurred 9:16 frame)
+//   SKETCH_ID-full-raw.webm → SKETCH_ID-full.mp4    (native 9:16, letterboxed, higher quality)
 
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
 const sketchId = process.argv[2] || '001-ma-26039';
-const duration = parseInt(process.argv[3] || '30', 10);
+const shortsDuration = parseInt(process.argv[3] || '30', 10);
+let fullDuration = parseInt(process.argv[4], 10);
+const fps = parseInt(process.argv[5] || '30', 10);
 
 const OUTPUT_DIR = path.resolve(__dirname, 'output');
-const inputPath = path.join(OUTPUT_DIR, `${sketchId}-raw.webm`);
-const outputPath = path.join(OUTPUT_DIR, `${sketchId}-shorts.mp4`);
+const shortsInput = path.join(OUTPUT_DIR, `${sketchId}-raw.webm`);
+const fullInput = path.join(OUTPUT_DIR, `${sketchId}-full-raw.webm`);
+const shortsOutput = path.join(OUTPUT_DIR, `${sketchId}-shorts.mp4`);
+const fullOutput = path.join(OUTPUT_DIR, `${sketchId}-full.mp4`);
 const thumbPath = path.join(OUTPUT_DIR, `${sketchId}-thumb.jpg`);
 
-if (!fs.existsSync(inputPath)) {
-  console.error(`Input not found: ${inputPath}`);
+function readFullLoopFromMeta(id) {
+  const metaPath = path.join(__dirname, '..', 'sketches', id, 'meta.json');
+  const fallback = parseInt(process.env.GENDROP_FULL_LOOP_DEFAULT || '90', 10);
+  if (!fs.existsSync(metaPath)) return fallback;
+  try {
+    const j = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    if (typeof j.loop_seconds === 'number' && j.loop_seconds > 0) {
+      return Math.min(j.loop_seconds, 600);
+    }
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+if (!Number.isFinite(fullDuration) || fullDuration <= 0) {
+  fullDuration = readFullLoopFromMeta(sketchId);
+}
+
+if (!fs.existsSync(shortsInput)) {
+  console.error(`Input not found: ${shortsInput}`);
   process.exit(1);
 }
 
-// Filter complex: blurred copy of the artwork as ambient background
-//   1. Split source into two streams
-//   2. Background: fill 1080x1920, heavy Gaussian blur, darken + saturate
-//   3. Foreground: scale to 1080 wide preserving aspect (artwork is sharp)
-//   4. Overlay foreground centered on blurred background
-const filterComplex = [
+if (!fs.existsSync(fullInput)) {
+  console.error(`Input not found: ${fullInput}`);
+  process.exit(1);
+}
+
+const shortsFilterComplex = [
   '[0:v]split=2[main][bg]',
   '[bg]scale=-2:1920:flags=lanczos,crop=1080:1920,gblur=sigma=40,eq=brightness=-0.2:saturation=1.35[bgfinal]',
   '[main]scale=1080:-2:flags=lanczos[fg]',
   '[bgfinal][fg]overlay=(W-w)/2:(H-h)/2:format=auto[out]'
 ].join(';');
+
+const fullFilterComplex = [
+  '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos',
+  'pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black[out]'
+].join(',');
 
 function runFFmpeg(args) {
   return new Promise((resolve, reject) => {
@@ -42,37 +73,56 @@ function runFFmpeg(args) {
 
 async function main() {
   console.log('=== GenDrop Processor ===');
-  console.log(`Input:  ${inputPath}`);
-  console.log(`Output: ${outputPath}`);
+  console.log(`Sketch:        ${sketchId}`);
+  console.log(`Shorts input:  ${shortsInput}`);
+  console.log(`Full input:    ${fullInput}`);
+  console.log(`Shorts dur:    ${shortsDuration}s | Full dur: ${fullDuration}s | fps: ${fps}`);
   console.log('');
 
   await runFFmpeg([
     '-y',
-    '-i', inputPath,
-    '-t', String(duration),
-    '-filter_complex', filterComplex,
+    '-i', shortsInput,
+    '-t', String(shortsDuration),
+    '-filter_complex', shortsFilterComplex,
     '-map', '[out]',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-crf', '20',
     '-preset', 'medium',
-    '-r', '30',
+    '-r', String(fps),
     '-an',
-    outputPath
+    shortsOutput
   ]);
 
   await runFFmpeg([
     '-y',
-    '-ss', String(Math.min(3, Math.floor(duration / 2))),
-    '-i', outputPath,
+    '-i', fullInput,
+    '-t', String(fullDuration),
+    '-filter_complex', fullFilterComplex,
+    '-map', '[out]',
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-crf', '16',
+    '-preset', 'slow',
+    '-r', String(fps),
+    '-an',
+    fullOutput
+  ]);
+
+  await runFFmpeg([
+    '-y',
+    '-ss', String(Math.min(3, Math.floor(shortsDuration / 2))),
+    '-i', shortsOutput,
     '-frames:v', '1',
     '-q:v', '2',
     thumbPath
   ]);
 
-  const stat = fs.statSync(outputPath);
+  const shortsStat = fs.statSync(shortsOutput);
+  const fullStat = fs.statSync(fullOutput);
   console.log('');
-  console.log(`Output : ${outputPath} (${(stat.size / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(`Shorts : ${shortsOutput} (${(shortsStat.size / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(`Full   : ${fullOutput} (${(fullStat.size / 1024 / 1024).toFixed(2)} MB)`);
   console.log(`Thumb  : ${thumbPath}`);
 }
 

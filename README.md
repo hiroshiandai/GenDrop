@@ -42,6 +42,18 @@ Google Cloud Console → **API とサービス** → **認証情報** → 使用
 
 GitHub Actions での Drive アップロードはリポジトリの Secrets（`GOOGLE_OAUTH_*`）を使用するため、**ユーザー名変更だけでは Secrets の再登録は不要**です（別アカウントに移した場合は別途対応が必要です）。
 
+## 動画出力（Shorts + フル尺 9:16）
+
+1回の録画ジョブで **2種類の MP4** を生成します。
+
+| 出力 | ファイル名 | 用途 |
+|------|------------|------|
+| YouTube Shorts 向け | `SKETCH-shorts.mp4` | いこれまでどおり、ブラー背景付きの 1080×1920。ソースは **960×540 ビューポート**からの短いクリップ（`start_time` / `duration`）。 |
+| アーカイブ用フル尺 | `SKETCH-full.mp4` | **1080×1920 ビューポート**で **冒頭から `loop_seconds` 秒**を録画し、レターボックスで **正確に 9:16** に収めた高ビットレート H.264（CRF 16 / preset slow）。 |
+
+- **ループ長**の優先順位: コマンド第6引数（ワークフローの `full_loop_seconds`）→ 各スケッチの `meta.json` の **`loop_seconds`** → 環境変数 `GENDROP_FULL_LOOP_DEFAULT` → 既定 **90**（上限 600 秒）。
+- Google Drive にフル尺も上げる場合はリポジトリ Secrets に **`DRIVE_FULL_FOLDER_ID`**（フォルダ ID）を追加してください。未設定のときはショート・サムネ・メタのみアップロードされます。
+
 ## スケジュール実行とローテーション（C-2）
 
 ワークフロー **「GenDrop - Scheduled Daily Rotation」**（`.github/workflows/scheduled.yml`）が次を行います。

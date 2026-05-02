@@ -27,6 +27,10 @@ on:
         description: 'If true, do not update automation/state.json after success (testing)'
         required: false
         default: 'false'
+      full_loop_seconds:
+        description: 'Full 9:16 capture length in seconds (from sketch start)'
+        required: false
+        default: '90'
 
 permissions:
   contents: write
@@ -38,7 +42,7 @@ concurrency:
 jobs:
   daily:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -69,11 +73,13 @@ jobs:
           DURATION='30'
           FPS='30'
           START='30'
+          FULL_LOOP='90'
           ADVANCE_STATE='true'
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             DURATION='${{ github.event.inputs.duration }}'
             FPS='${{ github.event.inputs.fps }}'
             START='${{ github.event.inputs.start_time }}'
+            FULL_LOOP='${{ github.event.inputs.full_loop_seconds }}'
             if [ "${{ github.event.inputs.skip_advance }}" = "true" ]; then
               ADVANCE_STATE='false'
             fi
@@ -81,11 +87,13 @@ jobs:
           [ -z "$DURATION" ] && DURATION=30
           [ -z "$FPS" ] && FPS=30
           [ -z "$START" ] && START=30
+          [ -z "$FULL_LOOP" ] && FULL_LOOP=90
           echo "duration=$DURATION" >> "$GITHUB_OUTPUT"
           echo "fps=$FPS" >> "$GITHUB_OUTPUT"
           echo "start_time=$START" >> "$GITHUB_OUTPUT"
+          echo "full_loop=$FULL_LOOP" >> "$GITHUB_OUTPUT"
           echo "advance_state=$ADVANCE_STATE" >> "$GITHUB_OUTPUT"
-          echo "Using duration=${DURATION}s fps=${FPS} start_time=${START}s advance_state=${ADVANCE_STATE}"
+          echo "Using duration=${DURATION}s fps=${FPS} start_time=${START}s full_loop=${FULL_LOOP}s advance_state=${ADVANCE_STATE}"
 
       - name: Pick next sketch (rotation)
         id: pick
@@ -97,11 +105,11 @@ jobs:
 
       - name: Record sketch (Puppeteer + MediaRecorder)
         working-directory: automation
-        run: node record.js ../sketches/${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.duration }} ${{ steps.params.outputs.fps }} ${{ steps.params.outputs.start_time }}
+        run: node record.js ../sketches/${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.duration }} ${{ steps.params.outputs.fps }} ${{ steps.params.outputs.start_time }} ${{ steps.params.outputs.full_loop }}
 
-      - name: Process video (FFmpeg → 1080x1920 Shorts MP4)
+      - name: Process video (Shorts + full 9:16 MP4)
         working-directory: automation
-        run: node process.js ${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.duration }}
+        run: node process.js ${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.duration }} ${{ steps.params.outputs.full_loop }} ${{ steps.params.outputs.fps }}
 
       - name: Show output info
         working-directory: automation
@@ -121,6 +129,7 @@ jobs:
           GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
           DRIVE_SHORTS_FOLDER_ID: ${{ secrets.DRIVE_SHORTS_FOLDER_ID }}
           DRIVE_THUMBS_FOLDER_ID: ${{ secrets.DRIVE_THUMBS_FOLDER_ID }}
+          DRIVE_FULL_FOLDER_ID: ${{ secrets.DRIVE_FULL_FOLDER_ID }}
           DRIVE_METADATA_FOLDER_ID: ${{ secrets.DRIVE_METADATA_FOLDER_ID }}
         run: node upload.js ${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.start_time }}
 
