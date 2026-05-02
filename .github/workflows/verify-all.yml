@@ -1,0 +1,130 @@
+name: GenDrop - Verify All Sketches
+
+# One-shot verification workflow.
+# Runs the full pipeline (record -> process -> metadata -> upload) for every
+# sketch in sketches/, in parallel batches. Use this to confirm that every
+# sketch works end-to-end.
+#
+# Trigger manually from the Actions tab.
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Recording duration in seconds (uniform for all sketches)'
+        required: false
+        default: '30'
+      fps:
+        description: 'Frames per second'
+        required: false
+        default: '30'
+      start_time:
+        description: 'Recording start offset in seconds (uniform for all sketches)'
+        required: false
+        default: '0'
+      max_parallel:
+        description: 'Max sketches to run in parallel (lower = safer for API limits)'
+        required: false
+        default: '4'
+
+permissions:
+  contents: read
+
+jobs:
+  list-sketches:
+    runs-on: ubuntu-latest
+    outputs:
+      sketches: ${{ steps.list.outputs.sketches }}
+      count: ${{ steps.list.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: list
+        name: List sketch folders
+        run: |
+          SKETCHES=$(ls -1 sketches | sort | jq -R . | jq -sc .)
+          COUNT=$(ls -1 sketches | wc -l)
+          echo "sketches=$SKETCHES" >> $GITHUB_OUTPUT
+          echo "count=$COUNT"       >> $GITHUB_OUTPUT
+          echo ""
+          echo "Found $COUNT sketches:"
+          ls -1 sketches | sort | sed 's/^/  - /'
+
+  verify:
+    needs: list-sketches
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        sketch_id: ${{ fromJson(needs.list-sketches.outputs.sketches) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: automation/package-lock.json
+
+      - name: Install system dependencies (FFmpeg, fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install Node dependencies
+        working-directory: automation
+        run: npm ci
+
+      - name: Record sketch (Puppeteer + MediaRecorder)
+        working-directory: automation
+        run: node record.js ../sketches/${{ matrix.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }}
+
+      - name: Process video (FFmpeg → 1080x1920 Shorts MP4)
+        working-directory: automation
+        run: node process.js ${{ matrix.sketch_id }} ${{ inputs.duration }}
+
+      - name: Show output info
+        working-directory: automation
+        run: ls -lh output/
+
+      - name: Generate metadata (Gemini)
+        working-directory: automation
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node generate-metadata.js ${{ matrix.sketch_id }}
+
+      - name: Upload to Google Drive (OAuth)
+        working-directory: automation
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          DRIVE_SHORTS_FOLDER_ID: ${{ secrets.DRIVE_SHORTS_FOLDER_ID }}
+          DRIVE_THUMBS_FOLDER_ID: ${{ secrets.DRIVE_THUMBS_FOLDER_ID }}
+          DRIVE_METADATA_FOLDER_ID: ${{ secrets.DRIVE_METADATA_FOLDER_ID }}
+        run: node upload.js ${{ matrix.sketch_id }} ${{ inputs.start_time }}
+
+      - name: Upload artifacts (GitHub backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gendrop-${{ matrix.sketch_id }}-run${{ github.run_number }}
+          path: automation/output/*
+          retention-days: 7
+
+  summary:
+    needs: verify
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print summary
+        run: |
+          echo "Verification run complete."
+          echo "Check each matrix job above for individual sketch results."
+          echo "Failures shown in red can be re-run individually via the regular"
+          echo "'GenDrop - Record p5.js Sketch' workflow."
