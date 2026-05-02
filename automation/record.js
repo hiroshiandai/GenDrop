@@ -112,27 +112,41 @@ async function record() {
 
     const url = `http://127.0.0.1:${PORT}/${sketchUrlPath}/`;
     console.log(`Loading ${url}`);
-    await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    console.log('DOM loaded. Waiting for canvas...');
 
-    await page.waitForSelector('canvas', { timeout: 15000 });
-    console.log('Canvas detected. Warming up 1.5s...');
-    await new Promise(r => setTimeout(r, 1500));
+    await page.waitForSelector('canvas', { timeout: 30000 });
+    const canvasInfo = await page.evaluate(() => {
+      const c = document.querySelector('canvas');
+      return { width: c.width, height: c.height };
+    });
+    console.log(`Canvas detected: ${canvasInfo.width}x${canvasInfo.height}. Warming up 2s...`);
+    await new Promise(r => setTimeout(r, 2000));
 
     if (startTime > 0) {
       console.log(`Letting sketch run for ${startTime}s before recording...`);
     }
     console.log(`Recording ${duration}s @ ${fps}fps via MediaRecorder...`);
 
+    page.on('console', msg => {
+      const t = msg.type();
+      if (t === 'log' || t === 'info') console.log(`[browser] ${msg.text()}`);
+    });
+
     const base64 = await page.evaluate(
       async (durationMs, frameRate, startMs) => {
+        const log = m => console.log(`[rec] ${m}`);
         const canvas = document.querySelector('canvas');
         if (!canvas) throw new Error('canvas not found');
+        log(`canvas ${canvas.width}x${canvas.height}`);
 
         if (startMs > 0) {
+          log(`waiting startTime ${startMs}ms`);
           await new Promise(r => setTimeout(r, startMs));
         }
 
         const stream = canvas.captureStream(frameRate);
+        log(`captureStream ok, tracks=${stream.getTracks().length}`);
 
         const candidates = [
           'video/webm;codecs=vp9',
@@ -141,15 +155,20 @@ async function record() {
         ];
         const mimeType = candidates.find(m => MediaRecorder.isTypeSupported(m));
         if (!mimeType) throw new Error('No supported MediaRecorder mimeType');
+        log(`mime ${mimeType}`);
 
         const recorder = new MediaRecorder(stream, {
           mimeType,
-          videoBitsPerSecond: 8_000_000
+          videoBitsPerSecond: 4_000_000
         });
 
         const chunks = [];
+        let totalSize = 0;
         recorder.ondataavailable = e => {
-          if (e.data && e.data.size > 0) chunks.push(e.data);
+          if (e.data && e.data.size > 0) {
+            chunks.push(e.data);
+            totalSize += e.data.size;
+          }
         };
 
         const stopped = new Promise((resolve, reject) => {
@@ -158,9 +177,12 @@ async function record() {
         });
 
         recorder.start(1000);
+        log(`recording ${durationMs}ms started`);
         await new Promise(r => setTimeout(r, durationMs));
+        log(`recording elapsed, chunks=${chunks.length} bytes=${totalSize}`);
         recorder.stop();
         await stopped;
+        log(`recorder stopped, finalizing blob`);
 
         const blob = new Blob(chunks, { type: mimeType });
         return await new Promise((resolve, reject) => {
