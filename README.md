@@ -41,3 +41,17 @@ Google Cloud Console → **API とサービス** → **認証情報** → 使用
 もし検証用に **GitHub Pages の URL** を「承認済みの JavaScript 生成元」やリダイレクト URI に追加していた場合は、`hiroshiandai.github.io` を **`hiroshiandailab.github.io`** に書き換えて保存してください。
 
 GitHub Actions での Drive アップロードはリポジトリの Secrets（`GOOGLE_OAUTH_*`）を使用するため、**ユーザー名変更だけでは Secrets の再登録は不要**です（別アカウントに移した場合は別途対応が必要です）。
+
+## スケジュール実行とローテーション（C-2）
+
+ワークフロー **「GenDrop - Scheduled Daily Rotation」**（`.github/workflows/scheduled.yml`）が次を行います。
+
+1. `sketches/` 内フォルダ名をソートした順序で、`automation/state.json` の **`cursor`** が指す作品を選ぶ  
+2. 録画 → FFmpeg → Gemini メタデータ → Drive アップロード（既存の単体 Record と同じパイプライン）  
+3. 成功したときだけ **`cursor` を 1 進め**、`state.json` を `main` にコミットしてプッシュ  
+
+**Cron**: デフォルトで **毎日 06:00 UTC**（おおよそ **日本時間 15:00**）。変更する場合は YAML の `cron` を編集してください。
+
+**手動テスト**: Actions タブから **Run workflow** を実行できます。ローテーションを進めたくないときは **`skip_advance`: true** にすると、`state.json` は更新されません。
+
+**ブランチ保護**: `main` への直接プッシュが禁止されている場合、`github-actions[bot]` のプッシュが弾かれることがあります。そのときは保護ルールで bot を許可するか、別の更新手段（例: 専用ブランチと PR）に切り替えてください。

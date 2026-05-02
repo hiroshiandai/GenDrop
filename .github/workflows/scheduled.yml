@@ -1,0 +1,151 @@
+name: GenDrop - Scheduled Daily Rotation
+
+# Picks the next sketch from automation/state.json, runs the full pipeline
+# (record → FFmpeg → Gemini metadata → Drive), then advances the cursor and
+# commits state.json back to main.
+#
+# Cron runs in UTC. Default: 06:00 UTC ≈ 15:00 JST (no DST in Japan).
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Recording duration in seconds'
+        required: false
+        default: '30'
+      fps:
+        description: 'Frames per second'
+        required: false
+        default: '30'
+      start_time:
+        description: 'Recording start offset in seconds'
+        required: false
+        default: '30'
+      skip_advance:
+        description: 'If true, do not update automation/state.json after success (testing)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gendrop-scheduled-rotation
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: automation/package-lock.json
+
+      - name: Install system dependencies (FFmpeg, fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install Node dependencies
+        working-directory: automation
+        run: npm ci
+
+      - name: Resolve recording parameters
+        id: params
+        shell: bash
+        run: |
+          DURATION='30'
+          FPS='30'
+          START='30'
+          ADVANCE_STATE='true'
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            DURATION='${{ github.event.inputs.duration }}'
+            FPS='${{ github.event.inputs.fps }}'
+            START='${{ github.event.inputs.start_time }}'
+            if [ "${{ github.event.inputs.skip_advance }}" = "true" ]; then
+              ADVANCE_STATE='false'
+            fi
+          fi
+          [ -z "$DURATION" ] && DURATION=30
+          [ -z "$FPS" ] && FPS=30
+          [ -z "$START" ] && START=30
+          echo "duration=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "fps=$FPS" >> "$GITHUB_OUTPUT"
+          echo "start_time=$START" >> "$GITHUB_OUTPUT"
+          echo "advance_state=$ADVANCE_STATE" >> "$GITHUB_OUTPUT"
+          echo "Using duration=${DURATION}s fps=${FPS} start_time=${START}s advance_state=${ADVANCE_STATE}"
+
+      - name: Pick next sketch (rotation)
+        id: pick
+        working-directory: automation
+        run: |
+          SKETCH="$(node rotation.js pick)"
+          echo "sketch_id=$SKETCH" >> "$GITHUB_OUTPUT"
+          echo "Selected sketch: $SKETCH"
+
+      - name: Record sketch (Puppeteer + MediaRecorder)
+        working-directory: automation
+        run: node record.js ../sketches/${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.duration }} ${{ steps.params.outputs.fps }} ${{ steps.params.outputs.start_time }}
+
+      - name: Process video (FFmpeg → 1080x1920 Shorts MP4)
+        working-directory: automation
+        run: node process.js ${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.duration }}
+
+      - name: Show output info
+        working-directory: automation
+        run: ls -lh output/
+
+      - name: Generate metadata (Gemini)
+        working-directory: automation
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node generate-metadata.js ${{ steps.pick.outputs.sketch_id }}
+
+      - name: Upload to Google Drive (OAuth)
+        working-directory: automation
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          DRIVE_SHORTS_FOLDER_ID: ${{ secrets.DRIVE_SHORTS_FOLDER_ID }}
+          DRIVE_THUMBS_FOLDER_ID: ${{ secrets.DRIVE_THUMBS_FOLDER_ID }}
+          DRIVE_METADATA_FOLDER_ID: ${{ secrets.DRIVE_METADATA_FOLDER_ID }}
+        run: node upload.js ${{ steps.pick.outputs.sketch_id }} ${{ steps.params.outputs.start_time }}
+
+      - name: Upload artifacts (GitHub backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gendrop-${{ steps.pick.outputs.sketch_id }}-scheduled-${{ github.run_number }}
+          path: automation/output/*
+          retention-days: 30
+
+      - name: Advance rotation state
+        id: advance
+        if: success() && steps.params.outputs.advance_state == 'true'
+        working-directory: automation
+        run: node rotation.js advance
+
+      - name: Commit and push state.json
+        if: success() && steps.params.outputs.advance_state == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add automation/state.json
+          if git diff --staged --quiet; then
+            echo "No state change to commit."
+          else
+            git commit -m "chore(gendrop): advance sketch rotation (scheduled)"
+            git push
+          fi

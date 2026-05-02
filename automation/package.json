@@ -6,7 +6,9 @@
   "scripts": {
     "record": "node record.js",
     "process": "node process.js",
-    "upload": "node upload.js"
+    "upload": "node upload.js",
+    "rotate:pick": "node rotation.js pick",
+    "rotate:advance": "node rotation.js advance"
   },
   "dependencies": {
     "googleapis": "^144.0.0",
