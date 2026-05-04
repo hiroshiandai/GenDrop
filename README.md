@@ -54,16 +54,17 @@ GitHub Actions での Drive アップロードはリポジトリの Secrets（`G
 - **1 周の長さ（フル尺の尺）**の優先順位: **①** スケッチが `window.__GENDROP_LOOP_SEC`（秒）または `window.__GENDROP_LOOP_FRAMES`（録画 fps で割って秒に換算）を設定している場合はそれを採用 → **②** `meta.json` の **`animation_loop_seconds`**（なければ後方互換で **`loop_seconds`**）→ **③** ローカル／緊急用に `record.js` の **第6引数**（任意）→ **④** 環境変数 **`GENDROP_ANIMATION_LOOP_DEFAULT`**（なければ旧名 **`GENDROP_FULL_LOOP_DEFAULT`**）→ **⑤** 既定 **90**（**0.5〜600** 秒にクランプ）。フル尺 MP4 は **`full-raw.webm` の実長**に合わせ、`-t` で切り詰めません。
 - Google Drive にフル尺も上げる場合はリポジトリ Secrets に **`DRIVE_FULL_FOLDER_ID`**（フォルダ ID）を追加してください。未設定のときはショート・サムネ・メタのみアップロードされます。
 
-## スケジュール実行とローテーション（C-2）
+## スケジュール実行（毎晩 Google Chat 通知）
 
-ワークフロー **「GenDrop - Scheduled Daily Rotation」**（`.github/workflows/scheduled.yml`）が次を行います。
+ワークフロー **「GenDrop - Scheduled Nightly Notify」**（`.github/workflows/scheduled.yml`）は **録画・Drive には触れません**（それらは **GenDrop - Record** の手動実行のみ）。
 
-1. `sketches/` 内フォルダ名をソートした順序で、`automation/state.json` の **`cursor`** が指す作品を選ぶ  
-2. 録画 → FFmpeg → Gemini メタデータ → Drive アップロード（既存の単体 Record と同じパイプライン）  
-3. 成功したときだけ **`cursor` を 1 進め**、`state.json` を `main` にコミットしてプッシュ  
+1. `sketches/` 以下に **`.txt` がある場合**: その中から **ランダムに 1 ファイル**を選び、本文を Google Chat に投稿します。  
+2. **`.txt` が 1 つもない場合**: スケッチフォルダから **ランダムに 1 本**選び、`generate-metadata.js`（Gemini）で **`SKETCH_ID-post.txt`** を生成してから、その内容を Chat に投稿します（このとき **`GEMINI_API_KEY`** が必要です）。
 
-**Cron**: デフォルトで **毎日 06:00 UTC**（おおよそ **日本時間 15:00**）。変更する場合は YAML の `cron` を編集してください。
+**Cron**: デフォルト **毎日 11:00 UTC**（**日本時間 20:00**）。変更する場合は YAML の `cron` を編集してください。
 
-**手動テスト**: Actions タブから **Run workflow** を実行できます。ローテーションを進めたくないときは **`skip_advance`: true** にすると、`state.json` は更新されません。
+**Chat のオン／オフ**: リポジトリ **Settings → Secrets and variables → Actions → Variables** に **`GENDROP_CHAT_NOTIFY`** を追加し、無効にしたいときだけ値を **`false`**（または **`0`**）にします。未設定のときは通知対象として扱います（Webhook が無ければ投稿はスキップされ、ジョブは成功で終わります）。
 
-**ブランチ保護**: `main` への直接プッシュが禁止されている場合、`github-actions[bot]` のプッシュが弾かれることがあります。そのときは保護ルールで bot を許可するか、別の更新手段（例: 専用ブランチと PR）に切り替えてください。
+**Webhook**: Secrets に **`GOOGLE_CHAT_WEBHOOK_URL`**（Google Chat の受信 Webhook URL）を登録します。未設定の場合、投稿は行われず成功で終了します。
+
+**手動テスト**: Actions タブから **Run workflow** を実行できます。入力 **`chat_notify`** に `true` / `false` を入れると、その回だけ Variable を上書きします（空欄なら Variable の値を使用）。
