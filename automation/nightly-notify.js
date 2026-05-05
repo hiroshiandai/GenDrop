@@ -47,7 +47,8 @@ function pickRandom(arr) {
 }
 
 async function postChat(text) {
-  const max = 3500;
+  // Bilingual post.txt is longer; stay under typical Chat webhook limits (~4096 total with header).
+  const max = 4000;
   const body = text.length > max ? text.slice(0, max) + '\n\n…(truncated)' : text;
   const payload = {
     text: `*GenDrop nightly*\n${body}`
