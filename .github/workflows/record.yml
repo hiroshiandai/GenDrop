@@ -23,6 +23,10 @@ on:
         description: 'If true, post generated post.txt to Google Chat (needs GOOGLE_CHAT_WEBHOOK_URL secret)'
         required: false
         default: 'true'
+      skip_full_drive_upload:
+        description: 'If true, do not upload full MP4 to Drive (no DRIVE_FULL_FOLDER_ID required)'
+        required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -80,6 +84,8 @@ jobs:
           DRIVE_THUMBS_FOLDER_ID: ${{ secrets.DRIVE_THUMBS_FOLDER_ID }}
           DRIVE_FULL_FOLDER_ID: ${{ secrets.DRIVE_FULL_FOLDER_ID }}
           DRIVE_METADATA_FOLDER_ID: ${{ secrets.DRIVE_METADATA_FOLDER_ID }}
+          GENDROP_REQUIRE_FULL_DRIVE_UPLOAD: '1'
+          GENDROP_SKIP_FULL_DRIVE_UPLOAD: ${{ inputs.skip_full_drive_upload == 'true' && '1' || '' }}
         run: node upload.js ${{ inputs.sketch_id }} ${{ inputs.start_time }}
 
       - name: Post copy to Google Chat (optional)

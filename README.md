@@ -52,7 +52,7 @@ GitHub Actions での Drive アップロードはリポジトリの Secrets（`G
 | アーカイブ用フル尺 | `SKETCH-full.mp4` | **1080×1920 ビューポート**で、アニメーションの **はじめから 1 周おわりまで** を録画した WebM をそのままエンコードし、レターボックスで **正確に 9:16** に収めた高ビットレート H.264（CRF 16 / preset slow）。**録画秒をワークフロー入力で決めるのではなく**、次の優先順で「1 周の長さ」を決めます。 |
 
 - **1 周の長さ（フル尺の尺）**の優先順位: **①** スケッチが `window.__GENDROP_LOOP_SEC`（秒）または `window.__GENDROP_LOOP_FRAMES`（録画 fps で割って秒に換算）を設定している場合はそれを採用 → **②** `meta.json` の **`animation_loop_seconds`**（なければ後方互換で **`loop_seconds`**）→ **③** ローカル／緊急用に `record.js` の **第6引数**（任意）→ **④** 環境変数 **`GENDROP_ANIMATION_LOOP_DEFAULT`**（なければ旧名 **`GENDROP_FULL_LOOP_DEFAULT`**）→ **⑤** 既定 **90**（**0.5〜600** 秒にクランプ）。フル尺 MP4 は **`full-raw.webm` の実長**に合わせ、`-t` で切り詰めません。
-- Google Drive にフル尺も上げる場合はリポジトリ Secrets に **`DRIVE_FULL_FOLDER_ID`**（フォルダ ID）を追加してください。未設定のときはショート・サムネ・メタのみアップロードされます。
+- Google Drive にフル尺も上げる場合はリポジトリ Secrets に **`DRIVE_FULL_FOLDER_ID`**（`GenDrop/full` フォルダの ID）を追加してください。**GenDrop - Record** ではフル尺 MP4 が生成されているのにこの Secret が空だと **アップロードは失敗**します（設定漏れに気づけます）。フルだけ不要なときは Record の入力 **`skip_full_drive_upload`** を `true` にします。検証用 **verify-all** では従来どおり Secret が無ければフルのアップロードのみスキップします。
 
 ## スケジュール実行（毎晩 Google Chat 通知）
 

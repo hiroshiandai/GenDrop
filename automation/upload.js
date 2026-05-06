@@ -10,6 +10,12 @@
 //   DRIVE_FULL_FOLDER_ID      (optional — 9:16 full-length archival MP4)
 //   DRIVE_METADATA_FOLDER_ID  (optional - skipped if not set)
 //
+// Optional env:
+//   GENDROP_REQUIRE_FULL_DRIVE_UPLOAD — if "1"/"true": fail when full MP4 exists but
+//     DRIVE_FULL_FOLDER_ID is missing/blank (use on GenDrop Record). If unset, full upload
+//     is skipped when the secret is missing (e.g. verify-all matrix).
+//   GENDROP_SKIP_FULL_DRIVE_UPLOAD — if "1": never upload full to Drive (artifact only).
+//
 // Why OAuth instead of Service Account?
 //   Service Accounts have 0 storage quota on personal Google Drive,
 //   so file uploads always fail with 'storageQuotaExceeded'.
@@ -34,8 +40,13 @@ const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
 const shortsFolderId = process.env.DRIVE_SHORTS_FOLDER_ID;
 const thumbsFolderId = process.env.DRIVE_THUMBS_FOLDER_ID;
-const fullFolderId = process.env.DRIVE_FULL_FOLDER_ID;
+const fullFolderIdRaw = process.env.DRIVE_FULL_FOLDER_ID;
+const fullFolderId = fullFolderIdRaw ? String(fullFolderIdRaw).trim() : '';
 const metadataFolderId = process.env.DRIVE_METADATA_FOLDER_ID;
+const requireFullDrive =
+  process.env.GENDROP_REQUIRE_FULL_DRIVE_UPLOAD === '1' ||
+  /^true$/i.test(process.env.GENDROP_REQUIRE_FULL_DRIVE_UPLOAD || '');
+const skipFullDrive = process.env.GENDROP_SKIP_FULL_DRIVE_UPLOAD === '1';
 
 const missing = [];
 if (!clientId) missing.push('GOOGLE_OAUTH_CLIENT_ID');
@@ -93,6 +104,7 @@ async function main() {
   console.log(`Auth method:   OAuth 2.0 user delegation (drive.file scope)`);
   console.log(`shorts folder: ${shortsFolderId}`);
   console.log(`thumbs folder: ${thumbsFolderId}`);
+  console.log(`full folder:   ${fullFolderId ? '(DRIVE_FULL_FOLDER_ID is set)' : '(not set)'}`);
   console.log('');
 
   const ts = timestamp();
@@ -104,18 +116,37 @@ async function main() {
   console.log(`  ok id=${mp4.id} (${(mp4.localSize / 1024 / 1024).toFixed(2)} MB)`);
   console.log(`  ${mp4.webViewLink}`);
 
+  const fullMp4Exists = fs.existsSync(fullMp4Path);
+  const fullMp4Size = fullMp4Exists ? fs.statSync(fullMp4Path).size : 0;
+
   let fullMp4 = null;
-  if (fullFolderId) {
-    if (fs.existsSync(fullMp4Path)) {
+  if (skipFullDrive) {
+    console.log('GENDROP_SKIP_FULL_DRIVE_UPLOAD=1 — full MP4 Drive upload disabled for this run.');
+  } else if (fullFolderId) {
+    if (fullMp4Exists && fullMp4Size > 0) {
       console.log(`Uploading ${baseName}-full.mp4 to full/ ...`);
       fullMp4 = await uploadFile(fullMp4Path, fullFolderId, `${baseName}-full.mp4`, 'video/mp4');
       console.log(`  ok id=${fullMp4.id} (${(fullMp4.localSize / 1024 / 1024).toFixed(2)} MB)`);
       console.log(`  ${fullMp4.webViewLink}`);
     } else {
-      console.log(`(skip) ${fullMp4Path} not found.`);
+      const msg = `Full MP4 missing or empty: ${fullMp4Path}`;
+      console.error(msg);
+      process.exit(1);
     }
   } else {
-    console.log('(DRIVE_FULL_FOLDER_ID not set - full-length MP4 upload skipped.)');
+    console.log('(DRIVE_FULL_FOLDER_ID not set — full-length MP4 not uploaded to Drive.)');
+    if (requireFullDrive && fullMp4Exists && fullMp4Size > 0) {
+      console.error('');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('  GenDrop: full-length video was generated but NOT uploaded.');
+      console.error('  Add repository Secret DRIVE_FULL_FOLDER_ID = Google Drive');
+      console.error('  folder ID for "GenDrop/full" (open the folder in Drive, copy');
+      console.error('  the id from the URL: .../folders/THIS_PART).');
+      console.error('  Or set workflow input skip_full_drive_upload=true to skip.');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('');
+      process.exit(1);
+    }
   }
 
   console.log(`Uploading ${baseName}.jpg to thumbs/ ...`);
