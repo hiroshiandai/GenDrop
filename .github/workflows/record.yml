@@ -19,6 +19,10 @@ on:
         description: 'Recording start offset in seconds (default 30 = skip the boring intro on most sketches)'
         required: false
         default: '30'
+      post_to_chat:
+        description: 'If true, post generated post.txt to Google Chat (needs GOOGLE_CHAT_WEBHOOK_URL secret)'
+        required: false
+        default: 'true'
 
 permissions:
   contents: read
@@ -77,6 +81,13 @@ jobs:
           DRIVE_FULL_FOLDER_ID: ${{ secrets.DRIVE_FULL_FOLDER_ID }}
           DRIVE_METADATA_FOLDER_ID: ${{ secrets.DRIVE_METADATA_FOLDER_ID }}
         run: node upload.js ${{ inputs.sketch_id }} ${{ inputs.start_time }}
+
+      - name: Post copy to Google Chat (optional)
+        if: ${{ inputs.post_to_chat == 'true' }}
+        working-directory: automation
+        env:
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+        run: node post-chat.js ${{ inputs.sketch_id }}
 
       - name: Upload artifacts (GitHub backup)
         uses: actions/upload-artifact@v4
