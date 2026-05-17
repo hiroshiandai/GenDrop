@@ -7,7 +7,8 @@
 //   GOOGLE_OAUTH_REFRESH_TOKEN
 //   DRIVE_SHORTS_FOLDER_ID
 //   DRIVE_THUMBS_FOLDER_ID
-//   DRIVE_FULL_FOLDER_ID      (optional — 9:16 full-length archival MP4)
+//   DRIVE_SHORTS_FOLDER_ID    — 9:16 full-loop MP4 (shorts.mp4)
+//   DRIVE_FULL_FOLDER_ID      — 16:9 full-loop MP4 (full.mp4); optional unless GENDROP_REQUIRE_FULL_DRIVE_UPLOAD
 //   DRIVE_METADATA_FOLDER_ID  (optional - skipped if not set)
 //
 // Optional env:
@@ -111,8 +112,12 @@ async function main() {
   const startStr = startTime !== '0' ? `-s${startTime}` : '';
   const baseName = `${sketchId}${startStr}-${ts}`;
 
-  console.log(`Uploading ${baseName}.mp4 to shorts/ ...`);
-  const mp4 = await uploadFile(mp4Path, shortsFolderId, `${baseName}.mp4`, 'video/mp4');
+  if (!fs.existsSync(mp4Path) || fs.statSync(mp4Path).size === 0) {
+    console.error(`9:16 full MP4 missing or empty: ${mp4Path}`);
+    process.exit(1);
+  }
+  console.log(`Uploading ${baseName}-9x16.mp4 to shorts/ (9:16 full loop) ...`);
+  const mp4 = await uploadFile(mp4Path, shortsFolderId, `${baseName}-9x16.mp4`, 'video/mp4');
   console.log(`  ok id=${mp4.id} (${(mp4.localSize / 1024 / 1024).toFixed(2)} MB)`);
   console.log(`  ${mp4.webViewLink}`);
 
@@ -124,8 +129,8 @@ async function main() {
     console.log('GENDROP_SKIP_FULL_DRIVE_UPLOAD=1 — full MP4 Drive upload disabled for this run.');
   } else if (fullFolderId) {
     if (fullMp4Exists && fullMp4Size > 0) {
-      console.log(`Uploading ${baseName}-full.mp4 to full/ ...`);
-      fullMp4 = await uploadFile(fullMp4Path, fullFolderId, `${baseName}-full.mp4`, 'video/mp4');
+      console.log(`Uploading ${baseName}-16x9.mp4 to full/ (16:9 full loop) ...`);
+      fullMp4 = await uploadFile(fullMp4Path, fullFolderId, `${baseName}-16x9.mp4`, 'video/mp4');
       console.log(`  ok id=${fullMp4.id} (${(fullMp4.localSize / 1024 / 1024).toFixed(2)} MB)`);
       console.log(`  ${fullMp4.webViewLink}`);
     } else {
@@ -140,7 +145,7 @@ async function main() {
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.error('  GenDrop: full-length video was generated but NOT uploaded.');
       console.error('  Add repository Secret DRIVE_FULL_FOLDER_ID = Google Drive');
-      console.error('  folder ID for "GenDrop/full" (open the folder in Drive, copy');
+      console.error('  folder ID for "GenDrop/full" (16:9 videos; open folder in Drive, copy');
       console.error('  the id from the URL: .../folders/THIS_PART).');
       console.error('  Or set workflow input skip_full_drive_upload=true to skip.');
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

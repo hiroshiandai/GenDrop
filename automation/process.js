@@ -1,9 +1,11 @@
-// GenDrop - FFmpeg post-processing (dual output)
+// GenDrop - FFmpeg post-processing (dual full-loop outputs)
 // Usage: node process.js <sketch_id> [shorts_duration_seconds] [fps]
 //
 // Inputs:
-//   SKETCH_ID-raw.webm      → SKETCH_ID-shorts.mp4  (Shorts look: blurred 9:16 frame)
-//   SKETCH_ID-full-raw.webm → SKETCH_ID-full.mp4    (entire full-raw duration, letterboxed 9:16)
+//   SKETCH_ID-vertical-raw.webm   → SKETCH_ID-shorts.mp4  (9:16 full loop → Drive shorts/)
+//   SKETCH_ID-landscape-raw.webm  → SKETCH_ID-full.mp4    (16:9 full loop → Drive full/)
+//
+// shorts_duration is only used for thumbnail seek offset (legacy argv compat).
 
 const fs = require('fs');
 const path = require('path');
@@ -14,32 +16,30 @@ const shortsDuration = parseInt(process.argv[3] || '30', 10);
 const fps = parseInt(process.argv[4] || '30', 10);
 
 const OUTPUT_DIR = path.resolve(__dirname, 'output');
-const shortsInput = path.join(OUTPUT_DIR, `${sketchId}-raw.webm`);
-const fullInput = path.join(OUTPUT_DIR, `${sketchId}-full-raw.webm`);
+const verticalInput = path.join(OUTPUT_DIR, `${sketchId}-vertical-raw.webm`);
+const landscapeInput = path.join(OUTPUT_DIR, `${sketchId}-landscape-raw.webm`);
 const shortsOutput = path.join(OUTPUT_DIR, `${sketchId}-shorts.mp4`);
 const fullOutput = path.join(OUTPUT_DIR, `${sketchId}-full.mp4`);
 const thumbPath = path.join(OUTPUT_DIR, `${sketchId}-thumb.jpg`);
 
-if (!fs.existsSync(shortsInput)) {
-  console.error(`Input not found: ${shortsInput}`);
+if (!fs.existsSync(verticalInput)) {
+  console.error(`Input not found: ${verticalInput}`);
   process.exit(1);
 }
 
-if (!fs.existsSync(fullInput)) {
-  console.error(`Input not found: ${fullInput}`);
+if (!fs.existsSync(landscapeInput)) {
+  console.error(`Input not found: ${landscapeInput}`);
   process.exit(1);
 }
 
-const shortsFilterComplex = [
-  '[0:v]split=2[main][bg]',
-  '[bg]scale=-2:1920:flags=lanczos,crop=1080:1920,gblur=sigma=40,eq=brightness=-0.2:saturation=1.35[bgfinal]',
-  '[main]scale=1080:-2:flags=lanczos[fg]',
-  '[bgfinal][fg]overlay=(W-w)/2:(H-h)/2:format=auto[out]'
-].join(';');
-
-const fullFilterComplex = [
+const verticalFilterComplex = [
   '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos',
   'pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black[out]'
+].join(',');
+
+const landscapeFilterComplex = [
+  '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos',
+  'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black[out]'
 ].join(',');
 
 function runFFmpeg(args) {
@@ -53,22 +53,21 @@ function runFFmpeg(args) {
 
 async function main() {
   console.log('=== GenDrop Processor ===');
-  console.log(`Sketch:        ${sketchId}`);
-  console.log(`Shorts input:  ${shortsInput}`);
-  console.log(`Full input:    ${fullInput} (encode full duration — matches one loop raw)`);
-  console.log(`Shorts dur:    ${shortsDuration}s | fps: ${fps}`);
+  console.log(`Sketch:          ${sketchId}`);
+  console.log(`9:16 input:      ${verticalInput} → ${shortsOutput} (Drive shorts/)`);
+  console.log(`16:9 input:      ${landscapeInput} → ${fullOutput} (Drive full/)`);
+  console.log(`fps:             ${fps}`);
   console.log('');
 
   await runFFmpeg([
     '-y',
-    '-i', shortsInput,
-    '-t', String(shortsDuration),
-    '-filter_complex', shortsFilterComplex,
+    '-i', verticalInput,
+    '-filter_complex', verticalFilterComplex,
     '-map', '[out]',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
-    '-crf', '20',
-    '-preset', 'medium',
+    '-crf', '16',
+    '-preset', 'slow',
     '-r', String(fps),
     '-an',
     shortsOutput
@@ -76,8 +75,8 @@ async function main() {
 
   await runFFmpeg([
     '-y',
-    '-i', fullInput,
-    '-filter_complex', fullFilterComplex,
+    '-i', landscapeInput,
+    '-filter_complex', landscapeFilterComplex,
     '-map', '[out]',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
@@ -100,9 +99,9 @@ async function main() {
   const shortsStat = fs.statSync(shortsOutput);
   const fullStat = fs.statSync(fullOutput);
   console.log('');
-  console.log(`Shorts : ${shortsOutput} (${(shortsStat.size / 1024 / 1024).toFixed(2)} MB)`);
-  console.log(`Full   : ${fullOutput} (${(fullStat.size / 1024 / 1024).toFixed(2)} MB)`);
-  console.log(`Thumb  : ${thumbPath}`);
+  console.log(`9:16 (shorts): ${shortsOutput} (${(shortsStat.size / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(`16:9 (full):   ${fullOutput} (${(fullStat.size / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(`Thumb:         ${thumbPath}`);
 }
 
 main().catch(err => {

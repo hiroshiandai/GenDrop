@@ -42,17 +42,18 @@ Google Cloud Console → **API とサービス** → **認証情報** → 使用
 
 GitHub Actions での Drive アップロードはリポジトリの Secrets（`GOOGLE_OAUTH_*`）を使用するため、**ユーザー名変更だけでは Secrets の再登録は不要**です（別アカウントに移した場合は別途対応が必要です）。
 
-## 動画出力（Shorts + フル尺 9:16）
+## 動画出力（9:16 + 16:9 フル尺）
 
-1回の録画ジョブで **2種類の MP4** を生成します。
+1回の **GenDrop - Record** で、**アニメ 1 周ずつ**のフル尺を **2 アスペクト**で録画・エンコードします。
 
-| 出力 | ファイル名 | 用途 |
-|------|------------|------|
-| YouTube Shorts 向け | `SKETCH-shorts.mp4` | いこれまでどおり、ブラー背景付きの 1080×1920。ソースは **960×540 ビューポート**からの短いクリップ（`start_time` / `duration`）。 |
-| アーカイブ用フル尺 | `SKETCH-full.mp4` | **1080×1920 ビューポート**で、アニメーションの **はじめから 1 周おわりまで** を録画した WebM をそのままエンコードし、レターボックスで **正確に 9:16** に収めた高ビットレート H.264（CRF 16 / preset slow）。**録画秒をワークフロー入力で決めるのではなく**、次の優先順で「1 周の長さ」を決めます。 |
+| 出力 | ローカルファイル | Google Drive フォルダ |
+|------|------------------|------------------------|
+| **9:16 フル尺** | `SKETCH-shorts.mp4` | **`shorts/`**（`DRIVE_SHORTS_FOLDER_ID`）· ファイル名例 `…-9x16.mp4` |
+| **16:9 フル尺** | `SKETCH-full.mp4` | **`full/`**（`DRIVE_FULL_FOLDER_ID`）· ファイル名例 `…-16x9.mp4` |
 
-- **1 周の長さ（フル尺の尺）**の優先順位: **①** スケッチが `window.__GENDROP_LOOP_SEC`（秒）または `window.__GENDROP_LOOP_FRAMES`（録画 fps で割って秒に換算）を設定している場合はそれを採用 → **②** `meta.json` の **`animation_loop_seconds`**（なければ後方互換で **`loop_seconds`**）→ **③** ローカル／緊急用に `record.js` の **第6引数**（任意）→ **④** 環境変数 **`GENDROP_ANIMATION_LOOP_DEFAULT`**（なければ旧名 **`GENDROP_FULL_LOOP_DEFAULT`**）→ **⑤** 既定 **90**（**0.5〜600** 秒にクランプ）。フル尺 MP4 は **`full-raw.webm` の実長**に合わせ、`-t` で切り詰めません。
-- Google Drive にフル尺も上げる場合はリポジトリ Secrets に **`DRIVE_FULL_FOLDER_ID`**（`GenDrop/full` フォルダの ID）を追加してください。**GenDrop - Record** ではフル尺 MP4 が生成されているのにこの Secret が空だと **アップロードは失敗**します（設定漏れに気づけます）。フルだけ不要なときは Record の入力 **`skip_full_drive_upload`** を `true` にします。検証用 **verify-all** では従来どおり Secret が無ければフルのアップロードのみスキップします。
+- 録画ビューポート: **9:16** = 1080×1920、**16:9** = 1920×1080。いずれも **はじめから 1 周**（`meta.json` の `animation_loop_seconds` やスケッチの `__GENDROP_LOOP_*` 等で尺を決定）。
+- 旧仕様の「960×540 短尺クリップ＋ブラー背景 Shorts」は廃止しました。
+- **16:9** を Drive に上げるには **`DRIVE_FULL_FOLDER_ID`** が必要です。**GenDrop - Record** では未設定だと **失敗**します（`skip_full_drive_upload=true` で 16:9 のみスキップ可）。**verify-all** では Secret が無いとき 16:9 アップロードのみスキップします。
 
 ## スケジュール実行（毎晩 Google Chat 通知）
 

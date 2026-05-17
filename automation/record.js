@@ -1,9 +1,9 @@
 // GenDrop - Puppeteer recording script (dual output)
-// Usage: node record.js <sketch_path> [shorts_duration] [fps] [shorts_start_time] [loop_override_seconds]
+// Usage: node record.js <sketch_path> [unused_duration] [fps] [unused_start] [loop_override_seconds]
 //
-// Produces:
-//   SKETCH_ID-raw.webm       — Shorts source clip (960×540 viewport, segment only)
-//   SKETCH_ID-full-raw.webm  — one full animation cycle from frame 0 (1080×1920 viewport)
+// Produces (one animation loop each, from frame 0):
+//   SKETCH_ID-vertical-raw.webm   — 9:16  (1080×1920) → Drive shorts/ after process
+//   SKETCH_ID-landscape-raw.webm  — 16:9 (1920×1080) → Drive full/ after process
 //
 // Full-length duration = length of ONE animation loop (not an arbitrary “recording time” setting):
 //   1) sketch: window.__GENDROP_LOOP_SEC (seconds) or __GENDROP_LOOP_FRAMES (frames at capture fps)
@@ -37,8 +37,8 @@ const sketchUrlPath = path
   .relative(REPO_ROOT, SKETCH_DIR)
   .replace(/\\/g, '/');
 
-const SHORTS_VIEWPORT = { width: 960, height: 540, deviceScaleFactor: 1 };
-const FULL_VIEWPORT = { width: 1080, height: 1920, deviceScaleFactor: 1 };
+const VERTICAL_VIEWPORT = { width: 1080, height: 1920, deviceScaleFactor: 1 };
+const LANDSCAPE_VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: 1 };
 
 const MAX_ANIMATION_LOOP_SEC = 600;
 
@@ -384,8 +384,8 @@ async function record() {
   console.log(`Sketch ID:        ${SKETCH_ID}`);
   console.log(`Sketch dir:       ${SKETCH_DIR}`);
   console.log(`URL path:         /${sketchUrlPath}/`);
-  console.log(`Shorts clip:      ${shortsDuration}s after ${shortsStartTime}s offset (960×540 viewport)`);
-  console.log(`Full capture:     exactly one animation loop from start (1080×1920 viewport)`);
+  console.log(`9:16 full loop:   1080×1920 viewport → shorts/ folder`);
+  console.log(`16:9 full loop:  1920×1080 viewport → full/ folder`);
   console.log(`FPS:              ${fps}`);
   console.log('');
 
@@ -408,47 +408,45 @@ async function record() {
   const pageUrl = `http://127.0.0.1:${PORT}/${sketchUrlPath}/`;
 
   try {
-    const pageShorts = await newRecordingPage(browser);
+    const pageVertical = await newRecordingPage(browser);
     try {
-      const shortsBuf = await captureWebm(
-        pageShorts,
+      const verticalBuf = await captureFullLoopWebm(
+        pageVertical,
         pageUrl,
-        SHORTS_VIEWPORT,
-        'YouTube Shorts source clip',
-        shortsDuration * 1000,
-        fps,
-        shortsStartTime * 1000,
-        4_000_000
-      );
-      const shortsPath = path.join(OUTPUT_DIR, `${SKETCH_ID}-raw.webm`);
-      fs.writeFileSync(shortsPath, shortsBuf);
-      console.log(`Saved: ${shortsPath} (${(shortsBuf.length / 1024 / 1024).toFixed(2)} MB)`);
-    } finally {
-      await pageShorts.close();
-    }
-
-    const pageFull = await newRecordingPage(browser);
-    try {
-      const fullBuf = await captureFullLoopWebm(
-        pageFull,
-        pageUrl,
-        FULL_VIEWPORT,
+        VERTICAL_VIEWPORT,
         fps,
         12_000_000,
         SKETCH_DIR
       );
-      const fullPath = path.join(OUTPUT_DIR, `${SKETCH_ID}-full-raw.webm`);
-      fs.writeFileSync(fullPath, fullBuf);
-      console.log(`Saved: ${fullPath} (${(fullBuf.length / 1024 / 1024).toFixed(2)} MB)`);
+      const verticalPath = path.join(OUTPUT_DIR, `${SKETCH_ID}-vertical-raw.webm`);
+      fs.writeFileSync(verticalPath, verticalBuf);
+      console.log(`Saved: ${verticalPath} (${(verticalBuf.length / 1024 / 1024).toFixed(2)} MB)`);
     } finally {
-      await pageFull.close();
+      await pageVertical.close();
+    }
+
+    const pageLandscape = await newRecordingPage(browser);
+    try {
+      const landscapeBuf = await captureFullLoopWebm(
+        pageLandscape,
+        pageUrl,
+        LANDSCAPE_VIEWPORT,
+        fps,
+        12_000_000,
+        SKETCH_DIR
+      );
+      const landscapePath = path.join(OUTPUT_DIR, `${SKETCH_ID}-landscape-raw.webm`);
+      fs.writeFileSync(landscapePath, landscapeBuf);
+      console.log(`Saved: ${landscapePath} (${(landscapeBuf.length / 1024 / 1024).toFixed(2)} MB)`);
+    } finally {
+      await pageLandscape.close();
     }
   } finally {
     await browser.close();
     server.close();
   }
 
-  console.log('\nRecording complete (shorts + full raw).');
+  console.log('\nRecording complete (9:16 + 16:9 full-loop raw).');
 }
 
 record().catch(err => {

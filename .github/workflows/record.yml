@@ -7,18 +7,14 @@ on:
         description: 'Sketch folder name (e.g. 001-ma-26039)'
         required: true
         default: '001-ma-26039'
-      duration:
-        description: 'Recording duration in seconds'
-        required: false
-        default: '30'
       fps:
         description: 'Frames per second'
         required: false
         default: '30'
-      start_time:
-        description: 'Recording start offset in seconds (default 30 = skip the boring intro on most sketches)'
+      thumb_seek_seconds:
+        description: 'Thumbnail frame offset in seconds (from 9:16 output; legacy name start_time in upload)'
         required: false
-        default: '30'
+        default: '3'
       post_to_chat:
         description: 'If true, post generated post.txt to Google Chat (needs GOOGLE_CHAT_WEBHOOK_URL secret)'
         required: false
@@ -58,11 +54,11 @@ jobs:
 
       - name: Record sketch (Puppeteer + MediaRecorder)
         working-directory: automation
-        run: node record.js ../sketches/${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }} ${{ inputs.start_time }}
+        run: node record.js ../sketches/${{ inputs.sketch_id }} 30 ${{ inputs.fps }} 0
 
-      - name: Process video (Shorts + full 9:16 MP4)
+      - name: Process video (9:16 + 16:9 full-loop MP4)
         working-directory: automation
-        run: node process.js ${{ inputs.sketch_id }} ${{ inputs.duration }} ${{ inputs.fps }}
+        run: node process.js ${{ inputs.sketch_id }} ${{ inputs.thumb_seek_seconds }} ${{ inputs.fps }}
 
       - name: Show output info
         working-directory: automation
@@ -86,7 +82,7 @@ jobs:
           DRIVE_METADATA_FOLDER_ID: ${{ secrets.DRIVE_METADATA_FOLDER_ID }}
           GENDROP_REQUIRE_FULL_DRIVE_UPLOAD: '1'
           GENDROP_SKIP_FULL_DRIVE_UPLOAD: ${{ inputs.skip_full_drive_upload == 'true' && '1' || '' }}
-        run: node upload.js ${{ inputs.sketch_id }} ${{ inputs.start_time }}
+        run: node upload.js ${{ inputs.sketch_id }} ${{ inputs.thumb_seek_seconds }}
 
       - name: Post copy to Google Chat (optional)
         if: ${{ inputs.post_to_chat == 'true' }}
